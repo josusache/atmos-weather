@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#09090b" />
+  <title>Atmos — Pronóstico Meteorológico, Marino y Astronómico</title>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet 1.9.4 CSS (Cloudflare CDN) -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient-bg" aria-hidden="true">
+    <div class="ambient-orb" id="ambientOrbPrimary"></div>
+  </div>
+
+  <div class="app-shell">
+    <!-- ==================== MINIMALIST TOPBAR ==================== -->
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="live-dot" id="liveConnectionDot"></span>
+        </div>
+        <div class="brand-titles">
+          <h1 class="brand-name">Atmos</h1>
+          <span class="brand-divider">/</span>
+          <span class="brand-subtitle">Estación Meteorológica, Marina y Astronómica</span>
+        </div>
+      </div>
+
+      <div class="topbar-controls">
+        <button type="button" class="coord-pill" id="btnOpenLocationModal" title="Cambiar ubicación o coordenadas">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="icon-xs">
+            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+          </svg>
+          <span class="location-name-text" id="headerLocationName">Costa de Badalona</span>
+          <span class="coord-value mono" id="headerCoordsText">41.4500°N, 2.2100°E</span>
+        </button>
+
+        <div class="sync-group">
+          <div class="sync-meta">
+            <span class="sync-updated" id="lastUpdatedText">Sincronizando</span>
+            <span class="sync-countdown mono" id="refreshCountdownText">05:00</span>
+          </div>
+          <button type="button" class="btn-icon-action" id="btnManualRefresh" title="Actualizar datos ahora">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" class="icon-sm" id="refreshSpinnerIcon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Actualizar</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Status Banner -->
+    <div id="statusBanner" class="status-banner hidden" role="alert">
+      <span id="statusBannerText"></span>
+      <button type="button" id="btnDismissBanner" class="status-banner-close" aria-label="Cerrar">&times;</button>
+    </div>
+
+    <!-- ==================== 1. HERO: TIEMPO ACTUAL · SOL · LUNA ==================== -->
+    <section class="hero-section surface-card" aria-label="Condiciones actuales y astronomía">
+      <div class="hero-three-col">
+        <!-- Columna 1: Estado Actual -->
+        <div class="hero-col-weather">
+          <div class="eyebrow-row">
+            <span class="eyebrow-label" id="currentDateLabel">Cargando fecha...</span>
+            <span class="weather-pill" id="dayNightBadge">--</span>
+          </div>
+
+          <div class="hero-temp-main-row">
+            <div class="hero-temp-huge mono" id="heroTempNow">--.-°</div>
+            <div class="hero-weather-icon-box" id="heroWeatherIconBox" aria-hidden="true"></div>
+          </div>
+
+          <div class="hero-condition-title" id="heroConditionText">Sincronizando estación...</div>
+
+          <div class="hero-Quick-stats mono">
+            <span id="heroHighLowText">Máx --° · Mín --°</span>
+            <span class="dot-sep">·</span>
+            <span id="heroFeelsLikeText">Sensación --°</span>
+            <span class="dot-sep">·</span>
+            <span id="heroWaterQuickText">Mar --°C</span>
+          </div>
+
+          <p class="hero-narrative" id="heroNarrativeText">
+            Obteniendo previsión hiperlocal, estado del mar y efemérides astronómicas...
+          </p>
+        </div>
+
+        <!-- Columna 2: Salida y Puesta de Sol (Arco Solar) -->
+        <div class="hero-col-astro">
+          <div class="astro-header">
+            <div>
+              <div class="eyebrow-label">Ciclo solar</div>
+              <div class="astro-title" id="solarStatusTitle">Salida y puesta de sol</div>
+            </div>
+            <span class="astro-badge mono" id="daylightDurationBadge">--h --m de luz</span>
+          </div>
+
+          <!-- SVG Solar Horizon Arc -->
+          <div class="solar-arc-container">
+            <svg viewBox="0 0 260 105" class="solar-arc-svg" aria-hidden="true">
+              <defs>
+                <linearGradient id="solarArcGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fdba74" stop-opacity="0.22" />
+                  <stop offset="100%" stop-color="#fdba74" stop-opacity="0.0" />
+                </linearGradient>
+              </defs>
+              <!-- Horizon Line -->
+              <line x1="16" y1="84" x2="244" y2="84" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="3 3" />
+              <!-- Full Day Dashed Parabola -->
+              <path d="M 24 84 Q 130 -12 236 84" fill="url(#solarArcGrad)" stroke="rgba(255,255,255,0.16)" stroke-width="1.5" />
+              <!-- Active Sun Path -->
+              <path id="solarActivePath" d="M 24 84 Q 130 -12 236 84" fill="none" stroke="#fdba74" stroke-width="2" stroke-dasharray="300" stroke-dashoffset="300" />
+              <!-- Sun Position Dot -->
+              <circle id="solarSunDot" cx="130" cy="36" r="5.5" fill="#fdba74" />
+              <circle id="solarSunHalo" cx="130" cy="36" r="11" fill="rgba(253, 186, 116, 0.2)" />
+            </svg>
+          </div>
+
+          <div class="astro-times-grid">
+            <div class="astro-time-item">
+              <span class="astro-time-label">Amanecer</span>
+              <strong class="mono" id="sunriseTimeVal">--:--</strong>
+            </div>
+            <div class="astro-time-item center">
+              <span class="astro-time-label">Mediodía solar</span>
+              <strong class="mono" id="solarNoonTimeVal">--:--</strong>
+            </div>
+            <div class="astro-time-item right">
+              <span class="astro-time-label">Atardecer</span>
+              <strong class="mono" id="sunsetTimeVal">--:--</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna 3: Fase Lunar y Astronomía -->
+        <div class="hero-col-astro">
+          <div class="astro-header">
+            <div>
+              <div class="eyebrow-label">Fase lunar</div>
+              <div class="astro-title" id="moonPhaseName">Calculando...</div>
+            </div>
+            <span class="astro-badge mono" id="moonIlluminationBadge">--% ilum.</span>
+          </div>
+
+          <div class="moon-visual-row">
+            <!-- Dynamic Geometric Moon Phase SVG -->
+            <div class="moon-svg-wrapper" id="moonSvgContainer" aria-hidden="true"></div>
+
+            <div class="moon-details-list">
+              <div class="moon-detail-item">
+                <span>Edad del ciclo</span>
+                <strong class="mono" id="moonAgeVal">-- días</strong>
+              </div>
+              <div class="moon-detail-item">
+                <span>Próxima luna llena</span>
+                <strong class="mono" id="nextFullMoonVal">--</strong>
+              </div>
+              <div class="moon-detail-item">
+                <span>Próxima luna nueva</span>
+                <strong class="mono" id="nextNewMoonVal">--</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="astro-footer-note" id="moonInfluenceNote">
+            Ciclo sinódico de 29.53 días.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 2. TELEMETRÍA COMPLETA (8 TARJETAS) ==================== -->
+    <section class="metrics-section" aria-label="Métricas meteorológicas y marinas">
+      <div class="metrics-grid">
+        <!-- 1. Temperatura del Agua y Estado del Mar -->
+        <article class="metric-card surface-card highlight-marine" id="cardMarine">
+          <div class="metric-top">
+            <span class="metric-title">Temperatura del agua</span>
+            <span class="metric-status-chip" id="marineStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricWaterTempVal">--.-<span class="unit">°C</span></div>
+            <div class="metric-secondary">
+              <span>Oleaje <strong class="mono" id="metricWaveHeightVal">-- m</strong></span>
+              <span>Periodo <strong class="mono" id="metricWavePeriodVal">-- s</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="waterTempBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>10°C Fría</span>
+              <span>20°C Templada</span>
+              <span>28°C Cálida</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="marineFootnote">Datos marinos superficiales en tiempo real.</p>
+        </article>
+
+        <!-- 2. Viento, Rachas y Dirección -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Viento y rachas</span>
+            <span class="metric-status-chip" id="windStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricWindSpeedVal">--<span class="unit">km/h</span></div>
+            <div class="metric-secondary">
+              <span>Rachas <strong class="mono" id="metricWindGustVal">-- km/h</strong></span>
+              <span>Dirección <strong class="mono" id="metricWindDirVal">--</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="windSpeedBarFill" style="width: 0%"></div>
+              <div class="level-gust-indicator" id="windGustMarker" style="left: 0%" title="Racha máxima"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>Calma</span>
+              <span>Moderado</span>
+              <span>Fuerte 40+</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="windFootnote">Velocidad sostenida y racha a 10 metros.</p>
+        </article>
+
+        <!-- 3. Humedad y Punto de Rocío -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Humedad y rocío</span>
+            <span class="metric-status-chip" id="humidityStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricHumidityVal">--<span class="unit">%</span></div>
+            <div class="metric-secondary">
+              <span>P. Rocío <strong class="mono" id="metricDewPointVal">--.-°C</strong></span>
+              <span>Margen ΔT <strong class="mono" id="metricDewSpreadVal">--.-°C</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="humidityBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>0% Seco</span>
+              <span>50% Confort</span>
+              <span>100% Saturado</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="humidityFootnote">Confort higrométrico y condensación.</p>
+        </article>
+
+        <!-- 4. Índice UV y Radiación Solar -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Índice UV y sol</span>
+            <span class="metric-status-chip" id="uvStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricUvIndexVal">--</div>
+            <div class="metric-secondary">
+              <span>Máx hoy <strong class="mono" id="metricUvMaxVal">--</strong></span>
+              <span>Directa <strong class="mono" id="metricDirectRadVal">-- W/m²</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="uvBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>0 Bajo</span>
+              <span>5 Medio</span>
+              <span>11+ Extremo</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="uvFootnote">Radiación ultravioleta e insolación.</p>
+        </article>
+
+        <!-- 5. Presión Atmosférica -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Presión atmosférica</span>
+            <span class="metric-status-chip" id="pressureStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricPressureVal">----<span class="unit">hPa</span></div>
+            <div class="metric-secondary">
+              <span>Tendencia 6h <strong class="mono" id="metricPressureTrendVal">--</strong></span>
+              <span>Ref. <strong class="mono">1013 hPa</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="pressureBarFill" style="width: 50%"></div>
+              <div class="level-threshold-marker" style="left: 50%" title="1013 hPa Estándar"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>985 Borrasca</span>
+              <span>1013</span>
+              <span>1040 Anticiclón</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="pressureFootnote">Presión barométrica reducida al nivel del mar.</p>
+        </article>
+
+        <!-- 6. Precipitación y Radar -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Precipitación</span>
+            <span class="metric-status-chip" id="precipStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricPrecipProbVal">--<span class="unit">%</span></div>
+            <div class="metric-secondary">
+              <span>Actual <strong class="mono" id="metricPrecipNowVal">0.0 mm</strong></span>
+              <span>Acum. 24h <strong class="mono" id="metricPrecip24hVal">-- mm</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="precipBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>0%</span>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="precipFootnote">Probabilidad horaria y radar Doppler.</p>
+        </article>
+
+        <!-- 7. Visibilidad y Nubosidad -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Visibilidad y nubes</span>
+            <span class="metric-status-chip" id="visibilityStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricVisibilityVal">--<span class="unit">km</span></div>
+            <div class="metric-secondary">
+              <span>Nubosidad <strong class="mono" id="metricCloudCoverVal">--%</strong></span>
+              <span>Estado <strong class="mono" id="metricSkyStateVal">--</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="cloudBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>0% Despejado</span>
+              <span>50%</span>
+              <span>100% Cubierto</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="visibilityFootnote">Alcance visual horizontal y cobertura nubosa.</p>
+        </article>
+
+        <!-- 8. Calidad del Aire (EAQI) -->
+        <article class="metric-card surface-card">
+          <div class="metric-top">
+            <span class="metric-title">Calidad del aire</span>
+            <span class="metric-status-chip" id="aqiStatusChip">--</span>
+          </div>
+          <div class="metric-value-row">
+            <div class="metric-primary mono" id="metricAqiVal">--<span class="unit">EAQI</span></div>
+            <div class="metric-secondary">
+              <span>PM2.5 <strong class="mono" id="metricPm25Val">-- µg/m³</strong></span>
+              <span>PM10 <strong class="mono" id="metricPm10Val">-- µg/m³</strong></span>
+            </div>
+          </div>
+          <div class="level-bar-wrapper">
+            <div class="level-bar-track">
+              <div class="level-bar-fill" id="aqiBarFill" style="width: 0%"></div>
+            </div>
+            <div class="level-bar-labels mono">
+              <span>0 Buena</span>
+              <span>50 Media</span>
+              <span>100+ Mala</span>
+            </div>
+          </div>
+          <p class="metric-footnote" id="aqiFootnote">Índice Europeo de Calidad del Aire en superficie.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ==================== 3. RADAR EN TIEMPO REAL + PRONÓSTICO 7 DÍAS ==================== -->
+    <div class="main-dashboard-grid">
+      <!-- Izquierda: Radar Doppler RainViewer -->
+      <section class="radar-section surface-card" aria-labelledby="radarSectionTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="radarSectionTitle" class="panel-title">Radar Doppler en tiempo real</h2>
+            <p class="panel-subtitle">Anillos de distancia a 5, 15 y 30 km · Evolución últimas 2h</p>
+          </div>
+
+          <div class="radar-header-badges">
+            <div class="radar-proximity-pill" id="radarProximityBadge">
+              <span class="prox-dot" id="radarProximityDot"></span>
+              <span class="mono" id="radarProximityText">Escaneando</span>
+            </div>
+            <select id="mapBaseSelect" class="btn-chip map-style-select" aria-label="Estilo de mapa">
+              <option value="dark_matter" selected>Oscuro minimalista</option>
+              <option value="dark_ventusky">Azul noche</option>
+              <option value="political">Callejero claro</option>
+              <option value="terrain">Relieve físico</option>
+              <option value="satellite">Satélite</option>
+            </select>
+            <button type="button" class="btn-chip" id="btnRecenterMap" title="Centrar en ubicación">
+              Centrar
+            </button>
+          </div>
+        </div>
+
+        <div class="radar-map-wrapper">
+          <div id="radarMap" class="radar-map" aria-label="Mapa de radar de lluvia"></div>
+
+          <div class="map-hud-overlay top-left">
+            <div class="hud-row">
+              <span class="hud-key">Barrido</span>
+              <span class="hud-val mono" id="radarFrameTimeLabel">--:--</span>
+              <span class="hud-tag" id="radarFrameTypeTag">Actual</span>
+            </div>
+            <div class="hud-row">
+              <span class="hud-key">Radio 30 km</span>
+              <span class="hud-val mono" id="radar25kmStatusText">Verificando</span>
+            </div>
+          </div>
+
+          <div class="map-hud-overlay bottom-left">
+            <div class="ring-legend-items mono">
+              <span><i class="ring-dot ring-5"></i>5km</span>
+              <span><i class="ring-dot ring-15"></i>15km</span>
+              <span><i class="ring-dot ring-30"></i>30km</span>
+            </div>
+          </div>
+
+          <div class="map-hud-overlay bottom-right">
+            <span class="dbz-label mono">dBZ</span>
+            <div class="dbz-gradient-bar"></div>
+          </div>
+        </div>
+
+        <div class="radar-controls-bar">
+          <div class="playback-buttons">
+            <button type="button" class="btn-Transport" id="btnRadarPrev" aria-label="Anterior">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="icon-xs">
+                <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z"/>
+              </svg>
+            </button>
+            <button type="button" class="btn-Transport btn-play-primary" id="btnRadarPlayPause" aria-label="Reproducir">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm" id="iconPlayRadar">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+              </svg>
+              <span id="radarPlayBtnText">Play 2h</span>
+            </button>
+            <button type="button" class="btn-Transport" id="btnRadarNext" aria-label="Siguiente">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="icon-xs">
+                <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4A1 1 0 0010 6v2.798L4.555 5.168z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="radar-scrubber-box">
+            <div class="scrubber-meta">
+              <span class="mono" id="radarTimelineStartLabel">-2h</span>
+              <span class="scrubber-current mono" id="radarScrubberCurrentLabel">Últimas 2 horas</span>
+              <span class="mono" id="radarTimelineEndLabel">Ahora</span>
+            </div>
+            <input
+              type="range"
+              id="radarTimelineSlider"
+              class="radar-slider"
+              min="0"
+              max="12"
+              value="12"
+              step="1"
+              aria-label="Línea de tiempo del radar"
+            />
+            <div class="radar-ticks" id="radarFrameTicks"></div>
+          </div>
+
+          <div class="radar-opacity-box">
+            <label for="radarOpacitySlider" class="mono">Opacidad</label>
+            <input
+              type="range"
+              id="radarOpacitySlider"
+              class="opacity-slider"
+              min="25"
+              max="95"
+              value="75"
+            />
+          </div>
+        </div>
+      </section>
+
+      <!-- Derecha: Pronóstico 7 Días -->
+      <section class="daily-section surface-card" aria-labelledby="dailySectionTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="dailySectionTitle" class="panel-title">Pronóstico de 7 días</h2>
+            <p class="panel-subtitle">Rango térmico diario, precipitación, viento e índice UV</p>
+          </div>
+        </div>
+
+        <div class="daily-list" id="dailyForecastList">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== 4. PREVISIÓN HORARIA (PRÓXIMAS 24 HORAS) ==================== -->
+    <section class="timeline-section surface-card" aria-labelledby="timelineSectionTitle">
+      <div class="panel-header">
+        <div>
+          <h2 id="timelineSectionTitle" class="panel-title">Evolución horaria · Próximas 24 horas</h2>
+          <p class="panel-subtitle">Precipitación, curva de temperatura y humedad, viento y presión barométrica</p>
+        </div>
+
+        <div class="timeline-legend-inline">
+          <span class="t-leg"><i class="leg-swatch sw-temp"></i>Temperatura (°C)</span>
+          <span class="t-leg"><i class="leg-swatch sw-hum"></i>Humedad (%)</span>
+          <span class="t-leg"><i class="leg-swatch sw-rain"></i>Lluvia (% / mm)</span>
+          <span class="t-leg"><i class="leg-swatch sw-wind"></i>Viento (km/h)</span>
+        </div>
+      </div>
+
+      <div class="timeline-scroll-container" id="timelineScrollContainer">
+        <div class="timeline-matrix" id="timelineMatrix">
+          <div class="matrix-sidebar">
+            <div class="sidebar-cell cell-header">Hora</div>
+            <div class="sidebar-cell cell-row-1">
+              <strong class="row-title">Cielo y Lluvia</strong>
+              <small class="row-unit">Prob % · mm</small>
+            </div>
+            <div class="sidebar-cell cell-row-2">
+              <strong class="row-title">Temp / Humedad</strong>
+              <small class="row-unit">Curva °C y %</small>
+            </div>
+            <div class="sidebar-cell cell-row-3">
+              <strong class="row-title">Viento y Presión</strong>
+              <small class="row-unit">km/h · hPa</small>
+            </div>
+          </div>
+
+          <div class="matrix-columns-wrapper" id="matrixColumnsWrapper"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ==================== MODAL DE UBICACIÓN Y BUSCADOR DE CIUDADES ==================== -->
+  <div class="modal-backdrop hidden" id="locationModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalLocationTitle">
+    <div class="modal-card surface-card">
+      <div class="modal-header">
+        <h3 id="modalLocationTitle">Seleccionar ubicación</h3>
+        <button type="button" class="btn-modal-close" id="btnCloseLocationModal" aria-label="Cerrar">&times;</button>
+      </div>
+
+      <!-- City Search Box -->
+      <div class="search-field-group">
+        <label for="inputCitySearch">Buscar municipio o costa</label>
+        <div class="search-input-row">
+          <input type="text" id="inputCitySearch" placeholder="Ej. Badalona, Sitges, Donostia, Palma, Madrid..." autocomplete="off" />
+          <button type="button" class="btn-secondary" id="btnSearchCity">Buscar</button>
+        </div>
+        <div class="search-results-list hidden" id="citySearchResults"></div>
+      </div>
+
+      <form id="locationForm" class="coord-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label for="inputLatitude">Latitud</label>
+            <input type="number" id="inputLatitude" step="0.0001" min="-90" max="90" required class="mono" placeholder="41.4500" />
+          </div>
+          <div class="form-field">
+            <label for="inputLongitude">Longitud</label>
+            <input type="number" id="inputLongitude" step="0.0001" min="-180" max="180" required class="mono" placeholder="2.2100" />
+          </div>
+        </div>
+
+        <div class="preset-locations">
+          <button type="button" class="btn-preset" data-name="Badalona" data-lat="41.45" data-lon="2.21">Badalona</button>
+          <button type="button" class="btn-preset" data-name="Barcelona" data-lat="41.3874" data-lon="2.1686">Barcelona</button>
+          <button type="button" class="btn-preset" data-name="Costa Brava (Palamós)" data-lat="41.8484" data-lon="3.1291">Costa Brava</button>
+          <button type="button" class="btn-preset" data-name="Palma de Mallorca" data-lat="39.5696" data-lon="2.6502">Palma</button>
+          <button type="button" class="btn-preset" data-name="Donostia / San Sebastián" data-lat="43.3183" data-lon="-1.9812">Donostia</button>
+          <button type="button" class="btn-preset" data-name="Madrid" data-lat="40.4168" data-lon="-3.7038">Madrid</button>
+          <button type="button" class="btn-preset" id="btnUseGeolocation">📍 Usar GPS actual</button>
+        </div>
+
+        <p class="form-hint">También puedes hacer <kbd>Shift</kbd> + clic en cualquier punto del mapa para consultar ese lugar.</p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btnResetDefaultCoords">Restaurar Badalona</button>
+          <button type="submit" class="btn-primary">Guardar ubicación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Leaflet 1.9.4 JS (Cloudflare CDN) -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+  <script src="app.js"></script>
+</body>
+</html>
